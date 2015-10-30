@@ -20,7 +20,6 @@ class PubNub
       memcpy(timetoken, "0\0", 2);
       };
 
-    //wget 'http://pubsub.pubnub.com/publish/pub-XXXXXXXXXXXXXXX/sub-XXXXXXXXXXXXXXXXXXXXXXXXX/0/ESP/0/"OK"' -O pubsub.txt
     bool publish(String _topic, String _json) {
       if (client.connect(_server, 80)) {
         client.print("GET /publish/");
@@ -34,16 +33,13 @@ class PubNub
         client.print(" HTTP/1.0\r\n\r\n");
         while (client.available() <= 1) {};
         String line = client.readString();
-Serial.print("PUBLISH ");
-Serial.println(line);
         return true;
       }
       return false;
     };
     
-    //wget 'http://pubsub.pubnub.com/subscribe/sub-XXXXXXXXXXXXXXXXXXXXXXXXX/ESP/0/14452477034226613' -O pubsub.txt
     String subscribe(String _topic) {
-      int loop = 1000;
+      int loop = 500;
       if (client.connect(_server, 80)) {
         client.print("GET /subscribe/");
         client.print(_subscribe);
@@ -52,11 +48,8 @@ Serial.println(line);
         client.print("/0/");
         client.print(timetoken);
         client.print(" HTTP/1.0\r\n\r\n");
-Serial.print("SUBSCRIBE ");
         while (client.available() <= 1 && loop--) {};
         String line = client.readString();
-Serial.print(loop);
-Serial.println(line);
         if (loop>0) {
           //M.display(1, 0b00000100, "read:"+line.length());
           int l = line.length();
@@ -64,10 +57,12 @@ Serial.println(line);
           line = line.substring(i+4);
           line.substring(line.length()-19).toCharArray(timetoken, 18);
           timetoken[18] = '\0';
-          return line;
+          return line.substring(3, line.length()-23); // [["ABC...XYZ],"14454460484914895"]
+        } else {
+          return "_"; //"?="+String(timetoken).substring(13)+".";
         }
       }
-      return "";
+      return "no connect";
     };
 
 };

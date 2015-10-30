@@ -6,21 +6,19 @@
 #include "Strip.h"
 #include "PubNub.h"
 
-const char* ssid1 = "freebox";
-const char* password1 = "XXXXXXXXXXXX";
-const char* ssid2 = "Livebox";
-const char* password2 = "XXXXXXXXXXXXXXXXXXXX";
+extern const char* ssid2;
+extern const char* password2;
+extern const char* ssid1;
+extern const char* password1;
 
-//IPAddress timeServer(129, 6, 15, 28); // time.nist.gov NTP server
-IPAddress timeServer(132, 163, 4, 101); // time-a.timefreq.bldrdoc.gov NTP server
-//IPAddress timeServer(192, 168, 0, 254); // mafreebox NTP server
-//unsigned long epoch = 60L;
+extern const char* pubKey;
+extern const char* subKey;
 
 WiFiServer server(80);
 
 Ticker tick;
 
-PubNub pubnub("pub-XXXXXXXXXXXXXXXXXXXXXXXX", "sub-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX");
+PubNub pubnub(pubKey, subKey);
 
 #define GRBpin 2
 
@@ -67,7 +65,7 @@ if (WiFi.status() != WL_CONNECTED) {
   Serial.println(ip);
   //Serial.end();
 
-  Ntp.sendNTPpacket(timeServer); // send an NTP packet to a time server
+  Ntp.sendNTPpacket(NTP::timeServer); // send an NTP packet to a time server
 
   sStrip = new Strip(5, "SS"); sStrip->fill( 16,   0,  16); // sec
   mStrip = new Strip(1, "MM"); mStrip->fill(255,   0,   0); // min RED
@@ -78,7 +76,7 @@ if (WiFi.status() != WL_CONNECTED) {
   server.begin();
   Serial.println("Server started");
 
-  pubnub.publish("ESP", "\"OK\"");
+  pubnub.publish("Stargate", "\"Started !\"");
 
   tick.attach(0.5, updateTime);
   //tick.attach(0.1, updateTime);
@@ -90,6 +88,7 @@ if (WiFi.status() != WL_CONNECTED) {
 void display() {
   byte *ptr = GRB, b;
   int i, j;
+  noInterrupts();
   for (i = 0; i < (LEN * 3); i++) {
     b = *ptr++;
     for (j = 0; j < 8; j++) {
@@ -107,6 +106,7 @@ void display() {
       b *= 2;
     }
   }
+  interrupts();
 
 }
 
@@ -165,7 +165,7 @@ void loop() {
 
   if (millis() - tx > 20000) {
     tx = millis();
-    String line = pubnub.subscribe("ESP");
+    String line = pubnub.subscribe("Stargate");
     Serial.println("ESP subscribe: " + line);
     
   }

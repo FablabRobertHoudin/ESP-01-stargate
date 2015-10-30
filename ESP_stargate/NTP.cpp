@@ -7,10 +7,17 @@
 
 class NTP Ntp;
 
+// https://www.arduino.cc/en/Tutorial/UdpNtpClient
+// https://github.com/sandeepmistry/esp8266-Arduino/blob/master/esp8266com/esp8266/libraries/ESP8266WiFi/examples/NTPClient/NTPClient.ino#L37
+IPAddress NTP::timeServer(129, 6, 15, 28); // time.nist.gov NTP server
+//IPAddress timeServer(132, 163, 4, 101); // time-a.timefreq.bldrdoc.gov NTP server (Fablab)
+//IPAddress timeServer(192, 168, 0, 251); // mafreebox NTP server
+
+
   void NTP::sendNTPpacket(IPAddress& address)
   {
     udp.begin(localPort);
-    Serial.println("sending NTP packet...");
+    //Serial.println("sending NTP packet...");
     // set all bytes in the buffer to 0
     memset(packetBuffer, 0, NTP_PACKET_SIZE);
     // Initialize values needed to form NTP request
@@ -57,10 +64,10 @@ class NTP Ntp;
     //Serial.println(epoch);
 
     _epoch -= t1; // offset ESP
-    _epoch += 2 * 3600; // +2h dÃ©callage
+    _epoch += FUSEAU * 3600; // +1h/2h dÃ©callage
 
-    Serial.print("NTP answer: epoch=");
-    Serial.println(_epoch);
+    //Serial.print("NTP answer: epoch=");
+    //Serial.println(_epoch);
   }
 
   void NTP::update()
