@@ -1,15 +1,26 @@
 #include "ESP8266WiFi.h"
 #include <Ticker.h>
 #include <WiFiUdp.h>
+//#include <EEPROM.h>
+
+//needed for library
+#include <DNSServer.h>
+#include <ESP8266WebServer.h>
+#include "WiFiManager.h"          //https://github.com/tzapu/WiFiManager
+
+/*
+ * 20/09/2015: strips added
+ * 15/10/2015: NTP;h
+ * 15/01/2016: added storage to flash (http://www.esp8266.com/viewtopic.php?f=34&t=2662)
+ * 
+ */
 
 #include "NTP.h"
 #include "Strip.h"
 #include "PubNub.h"
 
-extern const char* ssid2;
-extern const char* password2;
-extern const char* ssid1;
-extern const char* password1;
+//#define CONFIG_SECTOR 0x80-4
+//#define CONFIG_ADDRESS (CONFIG_SECTOR * SPI_FLASH_SEC_SIZE)
 
 extern const char* pubKey;
 extern const char* subKey;
@@ -28,38 +39,31 @@ Strip *sStrip, *mStrip, *hStrip, *waitStrip;
 // ====================================================================================================
 
 void setup() {
-  int loop = 0;
+  int loop = 0, i=0;
 
   Serial.begin(115200);
   Serial.flush();
 
+  //WiFiManager
+  //Local intialization. Once its business is done, there is no need to keep it around
+  WiFiManager wifiManager;
+
+  //exit after config instead of connecting
+  //wifiManager.setBreakAfterConfig(true);
+
+  //tries to connect to last known settings
+  //if it does not connect it starts an access point with the specified name
+  //here  "AutoConnectAP" with password "password"
+  //and goes into a blocking loop awaiting configuration
+  if (!wifiManager.autoConnect("stargateAP", "password")) {
+    Serial.println("failed to connect, we should reset as see if it connects");
+    delay(3000);
+    ESP.reset();
+    delay(5000);
+  }
+
   pinMode(GRBpin, OUTPUT); digitalWrite(GRBpin, LOW);
 
-  WiFi.begin(ssid1, password1);
-
-  while ((WiFi.status() != WL_CONNECTED) && (loop++ < 20)) {
-    delay(500);
-    Serial.print(".");
-  }
-
-//#ifdef(ssid2)
-if (WiFi.status() != WL_CONNECTED) {
-  Serial.print("2");
-  WiFi.begin(ssid2, password2);
-
-  loop=0;
-  while ((WiFi.status() != WL_CONNECTED) && (loop++ < 20)) {
-    delay(500);
-    Serial.print(".");
-  }
-}
-//#endif
-
-  /*
-    // Start the server
-    server.begin();
-    Serial.println("Server started");
-  */
   // Print the IP address
   IPAddress ip = WiFi.localIP();
   Serial.println(ip);
