@@ -32,6 +32,7 @@ Ticker tick;
 PubNub pubnub(pubKey, subKey);
 
 #define GRBpin 2
+#define WT588pin 0
 
 byte GRB[3 * LEN];
 Strip *sStrip, *mStrip, *hStrip, *waitStrip;
@@ -55,7 +56,7 @@ void setup() {
   //if it does not connect it starts an access point with the specified name
   //here  "AutoConnectAP" with password "password"
   //and goes into a blocking loop awaiting configuration
-  if (!wifiManager.autoConnect("stargateAP", "password")) {
+  if (!wifiManager.autoConnect("stargateAP", "Goudot")) {
     Serial.println("failed to connect, we should reset as see if it connects");
     delay(3000);
     ESP.reset();
@@ -63,6 +64,7 @@ void setup() {
   }
 
   pinMode(GRBpin, OUTPUT); digitalWrite(GRBpin, LOW);
+  pinMode(WT588pin, OUTPUT); digitalWrite(WT588pin, HIGH);
 
   // Print the IP address
   IPAddress ip = WiFi.localIP();
@@ -87,6 +89,31 @@ void setup() {
 }
 
 // ----------------------------------------------------------------------------------------------------
+
+void sendWT588(int b) {
+  int i;  
+    Serial.print("Send WT588D: ");
+    Serial.println(code);
+  noInterrupts();
+  digitalWrite(WT588pin, LOW);
+  delay(5); // ms
+  for (i = 0; i < 8; i++) {
+      if (b & 0x01) { // bit 1
+        digitalWrite(WT588pin, HIGH); // 4 HIGH 1 LOW ?
+        delayMicroseconds(400);
+        digitalWrite(WT588pin, LOW);
+        delayMicroseconds(200);
+      } else { // bit 0
+        digitalWrite(WT588pin, HIGH); // 1 HIGH 4 LOW ?
+        delayMicroseconds(200);
+        digitalWrite(WT588pin, LOW);
+        delayMicroseconds(400);
+      }
+      b /= 2;
+  }
+  digitalWrite(WT588pin, HIGH);
+  interrupts();
+}
 
 // GRB: 0 en bas avec 60, tourne dans le sens trigo...
 void display() {
@@ -135,6 +162,13 @@ void updateTime() {
   int i;
 
   Ntp.update();
+
+  if (Ntp._s==0) {
+    if (Ntp._m == 15) sendWT588(13);
+    if (Ntp._m == 30) sendWT588(14);
+    if (Ntp._m == 45) sendWT588(15);
+    if (Ntp._m == 0) sendWT588(Ntp._h % 12);
+  }
 /*
   Serial.print("Time: ");
   Serial.print(Ntp._h);
@@ -161,6 +195,7 @@ unsigned long
 tx = 0;
 
 void loop() {
+  int code;
 
   if (!Ntp.parsed) {
     Ntp.checkPacket();
@@ -249,13 +284,19 @@ void loop() {
 
 
   if (Serial.available()) {
+    code = Serial.parseInt();
+/*
     while (Serial.available()) {
       Serial.read();
     }
+*/
+    sendWT588(code);
+    
     wPos = 0; // départ
     wLoop = 10 * 60; // X tours
     waitStrip->fill(0, 0, 255, 0);
     tick.attach(0.001, updateWait);
+
   }
   /*
     if (millis() - tx > 20000) {
