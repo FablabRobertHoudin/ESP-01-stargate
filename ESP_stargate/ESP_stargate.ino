@@ -93,7 +93,7 @@ void setup() {
 void sendWT588(int b) {
   int i;  
     Serial.print("Send WT588D: ");
-    Serial.println(code);
+    Serial.println(b);
   noInterrupts();
   digitalWrite(WT588pin, LOW);
   delay(5); // ms
@@ -160,10 +160,19 @@ void updateWait() {
 void updateTime() {
   //byte *ptr, b, v;
   int i;
+  static int _m;
 
   Ntp.update();
 
-  if (Ntp._s==0) {
+  Serial.print(Ntp._h);
+  Serial.print(":");
+  Serial.print(Ntp._m);
+  Serial.print(":");
+  Serial.print(Ntp._s);
+  Serial.print("\n");
+
+  if (Ntp._s==0 && (Ntp._m != _m)) {
+    _m = Ntp._m;
     if (Ntp._m == 15) sendWT588(13);
     if (Ntp._m == 30) sendWT588(14);
     if (Ntp._m == 45) sendWT588(15);
