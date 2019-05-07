@@ -6,7 +6,31 @@
 //needed for library
 #include <DNSServer.h>
 #include <ESP8266WebServer.h>
-#include "WiFiManager.h"          //https://github.com/tzapu/WiFiManager
+#include <WiFiManager.h>          //https://github.com/tzapu/WiFiManager WiFi Configuration Magic
+
+// https://www.tala-informatique.fr/wiki/index.php/Esp8266_ntp_client
+#include <TimeLib.h>
+#include <NtpClientLib.h>
+
+#include <FastLED.h>
+
+// https://projetsdiy.fr/esp-01-esp8266-flasher-firmware-origine/
+#define LED_PIN     2 // côté GND
+#define NUM_LEDS    12
+#define BRIGHTNESS  64
+#define LED_TYPE    WS2811
+#define COLOR_ORDER GRB
+CRGB leds[NUM_LEDS];
+
+
+// Serveur NTP
+const char ntpServer[] = "pool.ntp.org";
+// Offset depuis UTC
+int8_t timeZoneOffset = 0;
+// Le fuseau utilise les horaires été / hiver
+bool dayligthSaving = true;
+// Minutes d'offset à ajouter
+int8_t minutesOffset = 0;
 
 /*
  * 20/09/2015: strips added
@@ -15,9 +39,9 @@
  * 
  */
 
-#include "NTP.h"
-#include "Strip.h"
-#include "PubNub.h"
+//#include "NTP.h"
+//#include "Strip.h"
+//#include "PubNub.h"
 
 //#define CONFIG_SECTOR 0x80-4
 //#define CONFIG_ADDRESS (CONFIG_SECTOR * SPI_FLASH_SEC_SIZE)
@@ -29,18 +53,20 @@ WiFiServer server(80);
 
 Ticker tick;
 
-PubNub pubnub(pubKey, subKey);
+//PubNub pubnub(pubKey, subKey);
 
-#define GRBpin 2
+//#define GRBpin 2
 #define WT588pin 0
 
-byte GRB[3 * LEN];
-Strip *sStrip, *mStrip, *hStrip, *waitStrip;
+//byte GRB[3 * LEN];
+//Strip *sStrip, *mStrip, *hStrip, *waitStrip;
 
 // ====================================================================================================
 
 void setup() {
   int loop = 0, i=0;
+
+  FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
 
   Serial.begin(115200);
   Serial.flush();
@@ -56,14 +82,17 @@ void setup() {
   //if it does not connect it starts an access point with the specified name
   //here  "AutoConnectAP" with password "password"
   //and goes into a blocking loop awaiting configuration
+/*
   if (!wifiManager.autoConnect("stargateAP", "Goudot")) {
     Serial.println("failed to connect, we should reset as see if it connects");
     delay(3000);
     ESP.reset();
     delay(5000);
   }
+*/
+  wifiManager.startConfigPortal("stargateAP");
 
-  pinMode(GRBpin, OUTPUT); digitalWrite(GRBpin, LOW);
+  //pinMode(GRBpin, OUTPUT); digitalWrite(GRBpin, LOW);
   pinMode(WT588pin, OUTPUT); digitalWrite(WT588pin, HIGH);
 
   // Print the IP address
@@ -71,22 +100,51 @@ void setup() {
   Serial.println(ip);
   //Serial.end();
 
-  Ntp.sendNTPpacket(NTP::timeServer); // send an NTP packet to a time server
+  // Démarrage du processus NTP
+  NTP.begin (ntpServer, timeZoneOffset, dayligthSaving, minutesOffset);
+  // Interval de synchronisation en seconde (30 min.)
+  NTP.setInterval (1800);
 
+  //Ntp.sendNTPpacket(NTP::timeServer); // send an NTP packet to a time server
+/*
   sStrip = new Strip(5, "SS"); sStrip->fill( 16,   0,  16); // sec
   mStrip = new Strip(1, "MM"); mStrip->fill(255,   0,   0); // min RED
   hStrip = new Strip(1, "HH"); hStrip->fill(255, 255, 255); // hour WHITE
-
+  
   waitStrip = new Strip(20, "wait");
+*/
 
   server.begin();
   Serial.println("Server started");
 
-  pubnub.publish("Stargate", "\"Started !\"");
+//  pubnub.publish("Stargate", "\"Started !\"");
 
   tick.attach(0.5, updateTime);
   //tick.attach(0.1, updateTime);
 }
+
+void printTime(){
+  static uint16_t i = 0;
+  Serial.printf ("%d %s ", i, NTP.getTimeDateString ().c_str());
+  Serial.print (NTP.isSummerTime () ? "Heure d'été. " : "Heure d'hiver. ");
+  Serial.printf ("Démarrage le: %s allumé depuis %s\n", NTP.getTimeDateString(NTP.getFirstSync()).c_str(), NTP.getUptimeString().c_str());
+  i++;
+  delay(5000);
+}
+
+void processNtpEvent (NTPSyncEvent_t ntpEvent) {
+  if (ntpEvent) {
+    Serial.print ("Erreur de synchronisation: ");
+    if (ntpEvent == noResponse)
+      Serial.println ("Serveur NTP injoignable");
+    else if (ntpEvent == invalidAddress)
+      Serial.println ("Adresse du serveur NTP invalide");
+  } else {
+    Serial.print ("Récupération du temps NTP: ");
+    Serial.println (NTP.getTimeDateString (NTP.getLastNTPSync ()));
+  }
+}
+
 
 // ----------------------------------------------------------------------------------------------------
 
@@ -116,7 +174,8 @@ void sendWT588(int b) {
 }
 
 // GRB: 0 en bas avec 60, tourne dans le sens trigo...
-void display() {
+/*
+void displayOLD() {
   byte *ptr = GRB, b;
   int i, j;
   noInterrupts();
@@ -140,12 +199,12 @@ void display() {
   interrupts();
 
 }
-
+*/
 // ----------------------------------------------------------------------------------------------------
 
 int wPos; // Position attente
 int wLoop; // nombre de fois qu'on itère
-
+/*
 void updateWait() {
   waitStrip->writeGRB(wPos++);
 
@@ -155,13 +214,14 @@ void updateWait() {
     tick.attach(0.5, updateTime);
   }
 }
+*/
 // ----------------------------------------------------------------------------------------------------
 
 void updateTime() {
   //byte *ptr, b, v;
   int i;
   static int _m;
-
+/*
   Ntp.update();
 
   Serial.print(Ntp._h);
@@ -178,6 +238,8 @@ void updateTime() {
     if (Ntp._m == 45) sendWT588(15);
     if (Ntp._m == 0) sendWT588(Ntp._h % 12);
   }
+*/
+
 /*
   Serial.print("Time: ");
   Serial.print(Ntp._h);
@@ -187,6 +249,8 @@ void updateTime() {
   Serial.print(Ntp._s);
   Serial.println();
 */
+
+/*
   // clear GRB
   memset(GRB, 0, LEN * 3);
 
@@ -196,6 +260,7 @@ void updateTime() {
   //memcpy(GRB + 59 * 3, "\x00\x00\xFF", 3); // last: BLUE
 
   display();
+*/
 }
 
 // ----------------------------------------------------------------------------------------------------
@@ -206,15 +271,21 @@ tx = 0;
 void loop() {
   int code;
 
+  NTP.onNTPSyncEvent ([](NTPSyncEvent_t event) {
+    processNtpEvent(event);
+  });
+  
+  printTime();
+/*
   if (!Ntp.parsed) {
     Ntp.checkPacket();
     // Start the server
   }
-
+*/
   if (millis() - tx > 20000) {
     tx = millis();
-    String line = pubnub.subscribe("Stargate");
-    Serial.println("ESP subscribe: " + line);
+    //String line = pubnub.subscribe("Stargate");
+    //Serial.println("ESP subscribe: " + line);
     
   }
 
@@ -240,12 +311,14 @@ void loop() {
     client.print("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<!DOCTYPE HTML>\r\n<html>");
     client.print("<head><title>Stargate</title></head>");
     client.print("<h3>Stargate</h3>my time: ");
+/*
     Ntp.update();
     client.print(Ntp._h);
     client.print(":");
     client.print(Ntp._m);
     client.print(":");
     client.print(Ntp._s);
+*/
     client.print("<br/><form method='GET'>");
     client.print("Couleur: <input type='color' name='color' value='#" + req.substring(idx + 9, idx + 15) + "' onchange='this.form.submit()'><br/>");
     //client.print("Vitesse: <input type='range' name='speed' min='0' max='9' value='"+req.substring(idxc+6, idxc+7)+"'><br/>");
@@ -282,11 +355,12 @@ void loop() {
       Serial.print(", wB=");
       Serial.print(wB, HEX);
       Serial.println();
-
+/*
       wPos = 0; // départ
       wLoop = 10 * 60; // X tours
       waitStrip->fill(wR, wG, wB, 0);
       tick.attach(0.01, updateWait);
+*/
     }
 
   } // if client
@@ -300,12 +374,12 @@ void loop() {
     }
 */
     sendWT588(code);
-    
+/*
     wPos = 0; // départ
     wLoop = 10 * 60; // X tours
     waitStrip->fill(0, 0, 255, 0);
     tick.attach(0.001, updateWait);
-
+*/
   }
   /*
     if (millis() - tx > 20000) {
